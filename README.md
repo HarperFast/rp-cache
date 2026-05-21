@@ -22,11 +22,23 @@ Then reference the plugin in the application's `config.yaml`:
 
 ## Options
 
-All options are optional.
+Exactly one upstream-resolution mode (`upstream`, `upstreamAllowlist`, or `trustForwardedHost`) must be configured; the plugin throws at startup otherwise.
+
+### `upstream: string`
+
+A single upstream origin URL (e.g. `'https://origin.example.com'` or `'https://origin.example.com/api'`). When set, every incoming request is proxied to this origin (preserving the request's path under any configured path prefix), and the request's host header is ignored.
+
+### `upstreamAllowlist: string[]`
+
+A list of upstream hostnames the request's host header is allowed to name. The header to read is governed by `upstreamHostHeader`. Hosts not in the list are rejected with `403`; a missing header is `400`. Always uses `https://` to reach the upstream.
+
+### `trustForwardedHost: boolean`
+
+When `true`, the plugin uses whatever host the request supplies via `upstreamHostHeader` without an allow-list. **Development only** — without it, any caller can make the proxy fetch from any host. Defaults to `false`.
 
 ### `upstreamHostHeader: string`
 
-Request header to read for the upstream host. Defaults to `'x-forwarded-host'`.
+Request header consulted by `upstreamAllowlist` / `trustForwardedHost` modes. Defaults to `'x-forwarded-host'`.
 
 ### `cacheStatusHeader: string`
 

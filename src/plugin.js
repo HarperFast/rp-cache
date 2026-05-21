@@ -10,25 +10,55 @@ const appendVia = (headers) => {
 	headers.set('via', existing ? `${existing}, ${entry}` : entry);
 };
 
+const resolveUpstreamUrl = (req) => {
+	if (config.upstream) {
+		const upstreamUrl = new URL(config.upstream);
+		const prefix = upstreamUrl.pathname === '/' ? '' : upstreamUrl.pathname.replace(/\/$/, '');
+		return `${upstreamUrl.origin}${prefix}${req.url}`;
+	}
+
+	const headerHost = req.headers.get(config.upstreamHostHeader);
+	if (!headerHost) {
+		const error = new Error('Missing upstream host header');
+		error.statusCode = 400;
+		throw error;
+	}
+
+	if (config.upstreamAllowlist?.length) {
+		if (!config.upstreamAllowlist.includes(headerHost)) {
+			const error = new Error('Upstream host not allowed');
+			error.statusCode = 403;
+			throw error;
+		}
+	} else if (!config.trustForwardedHost) {
+		const error = new Error('Upstream resolution misconfigured');
+		error.statusCode = 500;
+		throw error;
+	}
+
+	return `https://${headerHost}${req.url}`;
+};
+
 export const handleApplication = async (scope) => {
 	config.upstreamHostHeader = scope.options.get(['upstreamHostHeader']) ?? config.upstreamHostHeader;
 	config.cacheStatusHeader = scope.options.get(['cacheStatusHeader']) ?? config.cacheStatusHeader;
 	config.viaIdentifier = scope.options.get(['viaIdentifier']) ?? config.viaIdentifier;
+	config.upstream = scope.options.get(['upstream']) ?? null;
+	config.upstreamAllowlist = scope.options.get(['upstreamAllowlist']) ?? null;
+	config.trustForwardedHost = !!scope.options.get(['trustForwardedHost']);
+
+	if (!config.upstream && !config.upstreamAllowlist?.length && !config.trustForwardedHost) {
+		throw new Error(
+			"rp-cache: no upstream configured. Set 'upstream', 'upstreamAllowlist', or 'trustForwardedHost' in the plugin config."
+		);
+	}
 
 	const hooksFile = scope.options.get(['hooksFile']);
 
 	const defaults = {
 		isCacheableRequest: (req) => req.method === 'GET',
 		isCacheableResponse: (res) => res.statusCode === 200,
-		buildCacheKey: (req) => {
-			const upstreamHost = req.headers.get(config.upstreamHostHeader);
-			if (!upstreamHost) {
-				const error = new Error('Invalid host');
-				error.statusCode = 403;
-				throw error;
-			}
-			return `https://${upstreamHost}${req.url}`;
-		},
+		buildCacheKey: (req) => resolveUpstreamUrl(req),
 	};
 
 	const applyOverrides = (overrides) => {
