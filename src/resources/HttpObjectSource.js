@@ -1,4 +1,5 @@
 import { requestUpstream } from '../util/upstream.js';
+import { hooks } from '../hooks.js';
 
 const headerParsers = {
 	'accept-encoding': (value) => {
@@ -45,10 +46,6 @@ const headerParsers = {
 				return parsed;
 			});
 	},
-};
-
-const isCacheableStatusCode = (statusCode) => {
-	return statusCode === 200;
 };
 
 const ensureJsonHeaders = (headers) => {
@@ -144,7 +141,7 @@ export class HttpObjectSource extends Resource {
 		const upstreamReqConfig = resolveUpstreamRequestConfig(cacheKey, context);
 		const upstreamRes = await requestUpstream(upstreamReqConfig);
 
-		if (!isCacheableStatusCode(upstreamRes.statusCode)) {
+		if (!hooks.isCacheableResponse(upstreamRes, context)) {
 			context.noCacheStore = true;
 		}
 
