@@ -130,6 +130,14 @@ const applyFreshnessFromResponse = (upstreamRes, context) => {
 	} else if (upstreamRes.headers['expires']) {
 		const expires = Date.parse(upstreamRes.headers['expires']);
 		if (!Number.isNaN(expires)) context.expiresAt = expires;
+	} else if (upstreamRes.headers['last-modified']) {
+		// RFC 9111 §4.2.2: heuristic freshness lifetime of 10% of (now - Last-Modified).
+		const lastMod = Date.parse(upstreamRes.headers['last-modified']);
+		if (!Number.isNaN(lastMod)) {
+			const now = Date.now();
+			const heuristicLifetime = Math.max(0, (now - lastMod) * 0.1);
+			if (heuristicLifetime > 0) context.expiresAt = now + heuristicLifetime;
+		}
 	}
 };
 
