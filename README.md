@@ -85,6 +85,17 @@ POST /.rp-cache/invalidate?tag=articles                           # all entries 
 
 Path that exposes a JSON summary of cache outcome counters (`hit` / `miss` / `revalidated` / `bypass` / `invalidate` / `error`) plus uptime. Defaults to `'/.rp-cache/stats'`. Requires `super_user` permission.
 
+### `formatMap: Record<string, string>`
+
+Shortcut for content-negotiated variant keying. Maps `Accept`-header substrings to format labels; the matched label is folded into the cache key as `|format=<label>`. The first matching media type wins (insertion order). Pair it with an upstream that returns the requested format. Defaults to `null` (no format dimension). Consumers needing more complex selection should override `resolveFormat` directly via `hooksFile`.
+
+```yaml
+'@harperfast/rp-cache':
+  formatMap:
+    'text/markdown': markdown
+    'text/html': html
+```
+
 ### `varyHeaders: string[]`
 
 Request headers to fold into the cache key, so that requests with different values for these headers get separate cached responses. Defaults to `[]`.
@@ -109,11 +120,12 @@ export const isCacheableResponse = (res, context) => res.statusCode === 200;
 export const buildCacheKey = (req) => `${req.headers.get('x-forwarded-host')}${req.url}`;
 ```
 
-| Hook                  | Default                        | Effect of returning falsy / non-default                     |
-| --------------------- | ------------------------------ | ----------------------------------------------------------- |
-| `isCacheableRequest`  | `req.method === 'GET'`         | Non-matching requests are rejected with `405`.              |
-| `isCacheableResponse` | `res.statusCode === 200`       | When falsy, the upstream response is served but not stored. |
-| `buildCacheKey`       | `https://<upstreamHost><path>` | Return a string the plugin will use as the cache key.       |
+| Hook                  | Default                        | Effect of returning falsy / non-default                                              |
+| --------------------- | ------------------------------ | ------------------------------------------------------------------------------------ |
+| `isCacheableRequest`  | `req.method === 'GET'`         | Non-matching requests are rejected with `405`.                                       |
+| `isCacheableResponse` | `res.statusCode === 200`       | When falsy, the upstream response is served but not stored.                          |
+| `buildCacheKey`       | `https://<upstreamHost><path>` | Return a string the plugin will use as the cache key.                                |
+| `resolveFormat`       | `() => null`                   | Return a label (e.g. `'markdown'`) to fold into the cache key as `\|format=<label>`. |
 
 Standard HTTP semantics (`Cache-Control: no-store` / `no-cache`, ETag / `Last-Modified` revalidation) are always honored on top of the hook decisions.
 

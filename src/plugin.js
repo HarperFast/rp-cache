@@ -228,6 +228,7 @@ export const handleApplication = async (scope) => {
 	config.tagHeader = scope.options.get(['tagHeader']) ?? config.tagHeader;
 	config.invalidatePath = scope.options.get(['invalidatePath']) ?? config.invalidatePath;
 	config.statsPath = scope.options.get(['statsPath']) ?? config.statsPath;
+	config.formatMap = scope.options.get(['formatMap']) ?? config.formatMap;
 
 	if (!config.upstream && !config.upstreamAllowlist?.length && !config.trustForwardedHost) {
 		throw new Error(
@@ -242,14 +243,24 @@ export const handleApplication = async (scope) => {
 		isCacheableResponse: (res) => res.statusCode === 200,
 		buildCacheKey: (req) => {
 			const base = resolveUpstreamUrl(req);
-			if (!config.varyHeaders?.length) return base;
 			const parts = [base];
-			for (const name of [...config.varyHeaders].sort()) {
+			for (const name of [...(config.varyHeaders ?? [])].sort()) {
 				const value = (req.headers.get(name) ?? '').trim().toLowerCase();
 				parts.push(`${name.toLowerCase()}=${value}`);
 			}
+			const format = hooks.resolveFormat(req);
+			if (format) parts.push(`format=${String(format).toLowerCase()}`);
 			return parts.join('|');
 		},
+		resolveFormat: config.formatMap
+			? (req) => {
+					const accept = (req.headers.get('accept') ?? '').toLowerCase();
+					for (const [mediaType, label] of Object.entries(config.formatMap)) {
+						if (accept.includes(mediaType.toLowerCase())) return label;
+					}
+					return null;
+				}
+			: () => null,
 	};
 
 	const applyOverrides = (overrides) => {

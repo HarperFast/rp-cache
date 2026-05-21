@@ -2,6 +2,7 @@ export const hooks = {
 	isCacheableRequest: () => false,
 	isCacheableResponse: () => false,
 	buildCacheKey: () => '',
+	resolveFormat: () => null,
 };
 
 export const config = {
@@ -20,6 +21,12 @@ export const config = {
 	tagHeader: 'surrogate-key',
 	invalidatePath: '/.rp-cache/invalidate',
 	statsPath: '/.rp-cache/stats',
+	formatMap: null,
 };
 
-export const HOOK_NAMES = Object.freeze(['isCacheableRequest', 'isCacheableResponse', 'buildCacheKey']);
+export const HOOK_NAMES = Object.freeze([
+	'isCacheableRequest',
+	'isCacheableResponse',
+	'buildCacheKey',
+	'resolveFormat',
+]);
