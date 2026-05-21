@@ -40,14 +40,18 @@ const buildKey = (request) =>
 
 const fetchOnce = async (request) => {
 	const url = new URL(request.url);
-	const response = await agent.request({
+	const requestOptions = {
 		origin: url.origin,
 		path: url.pathname + url.search,
 		method: request.method,
 		headers: request.headers,
 		headersTimeout: config.upstreamHeadersTimeoutMs,
 		bodyTimeout: config.upstreamBodyTimeoutMs,
-	});
+	};
+	if (typeof config.maxBodyBytes === 'number' && config.maxBodyBytes > 0) {
+		requestOptions.maxResponseSize = config.maxBodyBytes;
+	}
+	const response = await agent.request(requestOptions);
 	const body = Buffer.from(await response.body.arrayBuffer());
 	return {
 		statusCode: response.statusCode,

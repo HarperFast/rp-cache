@@ -64,6 +64,10 @@ Maximum number of additional retry attempts after a network/timeout error. Each 
 
 Base delay (ms) for retry backoff. Defaults to `100`.
 
+### `maxBodyBytes: number | null`
+
+Hard limit on the upstream response body size. When set, responses larger than this are aborted by undici (the request fails). Defaults to `null` (unbounded). True streaming pass-through (proxying without buffering, for very large objects) is on the roadmap.
+
 ### `varyHeaders: string[]`
 
 Request headers to fold into the cache key, so that requests with different values for these headers get separate cached responses. Defaults to `[]`.

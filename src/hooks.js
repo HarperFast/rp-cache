@@ -16,6 +16,7 @@ export const config = {
 	upstreamBodyTimeoutMs: 30000,
 	upstreamRetries: 2,
 	upstreamRetryBaseDelayMs: 100,
+	maxBodyBytes: null,
 };
 
 export const HOOK_NAMES = Object.freeze(['isCacheableRequest', 'isCacheableResponse', 'buildCacheKey']);

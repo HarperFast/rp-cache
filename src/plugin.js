@@ -131,6 +131,7 @@ export const handleApplication = async (scope) => {
 	config.upstreamBodyTimeoutMs = scope.options.get(['upstreamBodyTimeoutMs']) ?? config.upstreamBodyTimeoutMs;
 	config.upstreamRetries = scope.options.get(['upstreamRetries']) ?? config.upstreamRetries;
 	config.upstreamRetryBaseDelayMs = scope.options.get(['upstreamRetryBaseDelayMs']) ?? config.upstreamRetryBaseDelayMs;
+	config.maxBodyBytes = scope.options.get(['maxBodyBytes']) ?? config.maxBodyBytes;
 
 	if (!config.upstream && !config.upstreamAllowlist?.length && !config.trustForwardedHost) {
 		throw new Error(
