@@ -131,6 +131,49 @@ const resolveUpstreamRequestConfig = (cacheKey, context) => {
 	};
 };
 
+const applyFreshnessFromResponse = (upstreamRes, context) => {
+	const cacheControl = upstreamRes.headers['cache-control'];
+	let sMaxAge;
+	let maxAge;
+
+	if (cacheControl) {
+		headerParsers['cache-control'](cacheControl).forEach((part) => {
+			switch (part.name) {
+				case 'no-store':
+				case 'private':
+					context.noCacheStore = true;
+					break;
+				case 'no-cache':
+					context.noCache = true;
+					break;
+				case 'max-age': {
+					const parsed = Number(part.value);
+					if (!Number.isNaN(parsed)) maxAge = parsed;
+					break;
+				}
+				case 's-maxage': {
+					const parsed = Number(part.value);
+					if (!Number.isNaN(parsed)) sMaxAge = parsed;
+					break;
+				}
+			}
+		});
+	} else if (upstreamRes.headers['pragma']) {
+		if (String(upstreamRes.headers['pragma']).toLowerCase().includes('no-cache')) {
+			context.noCache = true;
+		}
+	}
+
+	if (typeof sMaxAge === 'number') {
+		context.expiresAt = sMaxAge * 1000 + Date.now();
+	} else if (typeof maxAge === 'number') {
+		context.expiresAt = maxAge * 1000 + Date.now();
+	} else if (upstreamRes.headers['expires']) {
+		const expires = Date.parse(upstreamRes.headers['expires']);
+		if (!Number.isNaN(expires)) context.expiresAt = expires;
+	}
+};
+
 const resolveCachedHeaders = (upstreamResponseHeaders) => {
 	let headersString = '';
 
@@ -156,13 +199,7 @@ export class HttpObjectSource extends Resource {
 			context.noCacheStore = true;
 		}
 
-		{
-			headerParsers['cache-control'](upstreamRes.headers['cache-control']).forEach((part) => {
-				if (part.name === 'no-store') context.noCacheStore = true;
-				if (part.name === 'no-cache') context.noCache = true;
-				if (part.name === 'max-age') context.expiresAt = Number(part.value) * 1000 + Date.now();
-			});
-		}
+		applyFreshnessFromResponse(upstreamRes, context);
 
 		if (upstreamRes.statusCode === 304 && context.replacingRecord) {
 			context.cacheStatus = 'REVALIDATED';
