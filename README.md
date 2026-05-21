@@ -96,6 +96,22 @@ Shortcut for content-negotiated variant keying. Maps `Accept`-header substrings 
     'text/html': html
 ```
 
+### `sitemapUrl: string | null`
+
+URL of a sitemap.xml the plugin fetches periodically to pre-populate the cache. Each `<loc>` entry triggers a synthetic cache fill so warm requests already hit the cache. Defaults to `null` (warmer disabled).
+
+### `sitemapWarmIntervalMs: number`
+
+Interval between warm cycles. Defaults to `3600000` (1 hour). A value of `0` runs once at startup and never again.
+
+### `sitemapWarmAtStartup: boolean`
+
+When `true`, runs an initial warm cycle as soon as the plugin starts (async, doesn't block). Defaults to `true`.
+
+### `sitemapWarmFormats: string[] | null`
+
+Format labels (matching `formatMap` values) to warm for each sitemap URL. When set, the warmer synthesizes one request per (URL, format) pair using the corresponding media type in `Accept`. Defaults to `null` (warm a single default variant per URL).
+
 ### `varyHeaders: string[]`
 
 Request headers to fold into the cache key, so that requests with different values for these headers get separate cached responses. Defaults to `[]`.

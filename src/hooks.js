@@ -22,6 +22,10 @@ export const config = {
 	invalidatePath: '/.rp-cache/invalidate',
 	statsPath: '/.rp-cache/stats',
 	formatMap: null,
+	sitemapUrl: null,
+	sitemapWarmIntervalMs: 3600000,
+	sitemapWarmAtStartup: true,
+	sitemapWarmFormats: null,
 };
 
 export const HOOK_NAMES = Object.freeze([

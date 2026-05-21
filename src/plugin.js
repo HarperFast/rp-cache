@@ -3,6 +3,7 @@ import { HttpObject } from './resources/HttpObject.js';
 import { hooks, config, HOOK_NAMES } from './hooks.js';
 import { requestUpstream } from './util/upstream.js';
 import { buildUpstreamRequest, cleanResponseHeaders, appendVia } from './util/proxyHeaders.js';
+import { startWarmer, stopWarmer } from './warmer.js';
 
 const parseClientCacheControl = (req) => {
 	const result = {
@@ -229,6 +230,10 @@ export const handleApplication = async (scope) => {
 	config.invalidatePath = scope.options.get(['invalidatePath']) ?? config.invalidatePath;
 	config.statsPath = scope.options.get(['statsPath']) ?? config.statsPath;
 	config.formatMap = scope.options.get(['formatMap']) ?? config.formatMap;
+	config.sitemapUrl = scope.options.get(['sitemapUrl']) ?? null;
+	config.sitemapWarmIntervalMs = scope.options.get(['sitemapWarmIntervalMs']) ?? config.sitemapWarmIntervalMs;
+	config.sitemapWarmAtStartup = scope.options.get(['sitemapWarmAtStartup']) ?? config.sitemapWarmAtStartup;
+	config.sitemapWarmFormats = scope.options.get(['sitemapWarmFormats']) ?? null;
 
 	if (!config.upstream && !config.upstreamAllowlist?.length && !config.trustForwardedHost) {
 		throw new Error(
@@ -273,6 +278,9 @@ export const handleApplication = async (scope) => {
 	applyOverrides();
 
 	databases.cache.HttpResourceCache.sourcedFrom(HttpObjectSource);
+
+	startWarmer(scope.logger);
+	scope.once?.('close', stopWarmer);
 
 	if (hooksFile) {
 		scope.handleEntry(hooksFile, async (entry) => {
