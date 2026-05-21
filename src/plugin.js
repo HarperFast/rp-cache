@@ -85,6 +85,29 @@ const formatProxyResponse = (upstreamRes, cacheStatusLabel) => {
 	};
 };
 
+const readCacheStatus = (headers, key) => {
+	if (!headers) return null;
+	if (typeof headers.get === 'function') return headers.get(key);
+	const lower = key.toLowerCase();
+	for (const name of Object.keys(headers)) {
+		if (name.toLowerCase() === lower) return headers[name];
+	}
+	return null;
+};
+
+const pathBucketOf = (rawUrl) => {
+	const path = rawUrl.split('?')[0];
+	const match = path.match(/^\/(\w*)/);
+	return match?.[1] || 'root';
+};
+
+const recordOutcome = (startNs, req, status) => {
+	if (typeof server === 'undefined' || typeof server.recordAnalytics !== 'function') return;
+	const elapsedMs = performance.now() - startNs;
+	const event = `cache-${String(status ?? 'unknown').toLowerCase()}`;
+	server.recordAnalytics(elapsedMs, event, pathBucketOf(req.url));
+};
+
 const handleInvalidate = async (req) => {
 	if (!req.user?.role?.permission?.super_user) {
 		const error = new Error('Unauthorized');
@@ -224,49 +247,64 @@ export const handleApplication = async (scope) => {
 	}
 
 	scope.server.http(async (req) => {
-		const reqPath = req.url.split('?')[0];
-		if (reqPath === config.invalidatePath) {
-			return handleInvalidate(req);
-		}
+		const start = performance.now();
+		try {
+			const reqPath = req.url.split('?')[0];
+			if (reqPath === config.invalidatePath) {
+				const response = await handleInvalidate(req);
+				recordOutcome(start, req, 'invalidate');
+				return response;
+			}
 
-		if (!hooks.isCacheableRequest(req)) {
-			const error = new Error('Method not allowed');
-			error.statusCode = 405;
-			throw error;
-		}
-
-		const directives = parseClientCacheControl(req);
-
-		if (directives.noStore) {
-			return proxyBypass(req);
-		}
-
-		if (directives.onlyIfCached) {
-			const cacheKey = hooks.buildCacheKey(req);
-			const existing = await databases.cache.HttpResourceCache.get(cacheKey, { onlyIfCached: true });
-			if (!existing) {
-				const error = new Error('Gateway Timeout');
-				error.statusCode = 504;
+			if (!hooks.isCacheableRequest(req)) {
+				const error = new Error('Method not allowed');
+				error.statusCode = 405;
 				throw error;
 			}
-			// fall through to normal flow; Harper will serve from cache
+
+			const directives = parseClientCacheControl(req);
+
+			if (directives.noStore) {
+				const response = await proxyBypass(req);
+				recordOutcome(start, req, 'bypass');
+				return response;
+			}
+
+			if (directives.onlyIfCached) {
+				const cacheKey = hooks.buildCacheKey(req);
+				const existing = await databases.cache.HttpResourceCache.get(cacheKey, { onlyIfCached: true });
+				if (!existing) {
+					const error = new Error('Gateway Timeout');
+					error.statusCode = 504;
+					throw error;
+				}
+			}
+
+			if (directives.noCache) {
+				const response = await proxyForceRevalidate(req);
+				const status = readCacheStatus(response.headers, config.cacheStatusHeader) ?? 'MISS';
+				recordOutcome(start, req, status);
+				return response;
+			}
+
+			const cacheKey = hooks.buildCacheKey(req);
+			const httpObject = await HttpObject.get(cacheKey, req);
+
+			const headers = httpObject.headers;
+			const status = httpObject.cacheStatus ?? 'HIT';
+			headers.set(config.cacheStatusHeader, status);
+			appendVia(headers);
+
+			recordOutcome(start, req, status);
+
+			return {
+				status: httpObject.statusCode,
+				headers,
+				body: httpObject.content,
+			};
+		} catch (err) {
+			recordOutcome(start, req, 'error');
+			throw err;
 		}
-
-		if (directives.noCache) {
-			return proxyForceRevalidate(req);
-		}
-
-		const cacheKey = hooks.buildCacheKey(req);
-		const httpObject = await HttpObject.get(cacheKey, req);
-
-		const headers = httpObject.headers;
-		headers.set(config.cacheStatusHeader, httpObject.cacheStatus ?? 'HIT');
-		appendVia(headers);
-
-		return {
-			status: httpObject.statusCode,
-			headers,
-			body: httpObject.content,
-		};
 	});
 };
