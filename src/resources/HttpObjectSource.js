@@ -1,6 +1,24 @@
 import { requestUpstream } from '../util/upstream.js';
 import { buildUpstreamRequest, cleanResponseHeadersAsString } from '../util/proxyHeaders.js';
-import { hooks } from '../hooks.js';
+import { hooks, config } from '../hooks.js';
+
+const checkVaryCompatibility = (upstreamRes, context) => {
+	const varyHeader = upstreamRes.headers['vary'];
+	if (!varyHeader) return;
+	if (varyHeader.trim() === '*') {
+		context.noCacheStore = true;
+		return;
+	}
+	const required = varyHeader.split(',').map((s) => s.trim().toLowerCase());
+	const allowed = new Set((config.varyHeaders ?? []).map((s) => s.toLowerCase()));
+	for (const name of required) {
+		if (!name) continue;
+		if (!allowed.has(name)) {
+			context.noCacheStore = true;
+			return;
+		}
+	}
+};
 
 const parseCacheControl = (value) => {
 	if (!value) return [];
@@ -119,6 +137,7 @@ export class HttpObjectSource extends Resource {
 		}
 
 		applyFreshnessFromResponse(upstreamRes, context);
+		checkVaryCompatibility(upstreamRes, context);
 
 		if (upstreamRes.statusCode === 304 && context.replacingRecord) {
 			context.cacheStatus = 'REVALIDATED';

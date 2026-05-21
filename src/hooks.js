@@ -11,6 +11,7 @@ export const config = {
 	upstream: null,
 	upstreamAllowlist: null,
 	trustForwardedHost: false,
+	varyHeaders: [],
 };
 
 export const HOOK_NAMES = Object.freeze(['isCacheableRequest', 'isCacheableResponse', 'buildCacheKey']);

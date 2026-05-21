@@ -130,6 +130,7 @@ export const handleApplication = async (scope) => {
 	config.upstream = scope.options.get(['upstream']) ?? null;
 	config.upstreamAllowlist = scope.options.get(['upstreamAllowlist']) ?? null;
 	config.trustForwardedHost = !!scope.options.get(['trustForwardedHost']);
+	config.varyHeaders = scope.options.get(['varyHeaders']) ?? [];
 
 	if (!config.upstream && !config.upstreamAllowlist?.length && !config.trustForwardedHost) {
 		throw new Error(
@@ -142,7 +143,16 @@ export const handleApplication = async (scope) => {
 	const defaults = {
 		isCacheableRequest: (req) => req.method === 'GET',
 		isCacheableResponse: (res) => res.statusCode === 200,
-		buildCacheKey: (req) => resolveUpstreamUrl(req),
+		buildCacheKey: (req) => {
+			const base = resolveUpstreamUrl(req);
+			if (!config.varyHeaders?.length) return base;
+			const parts = [base];
+			for (const name of [...config.varyHeaders].sort()) {
+				const value = (req.headers.get(name) ?? '').trim().toLowerCase();
+				parts.push(`${name.toLowerCase()}=${value}`);
+			}
+			return parts.join('|');
+		},
 	};
 
 	const applyOverrides = (overrides) => {
