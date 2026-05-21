@@ -326,7 +326,7 @@ export const handleApplication = async (scope) => {
 
 			const directives = parseClientCacheControl(req);
 
-			if (directives.noStore) {
+			if (directives.noStore || req.headers.get('range')) {
 				const response = await proxyBypass(req);
 				recordOutcome(start, req, 'bypass');
 				return stripBodyForHead(req, response);
