@@ -85,6 +85,16 @@ const formatProxyResponse = (upstreamRes, cacheStatusLabel) => {
 	};
 };
 
+const counters = {
+	hit: 0,
+	miss: 0,
+	revalidated: 0,
+	bypass: 0,
+	invalidate: 0,
+	error: 0,
+};
+const pluginStartTime = Date.now();
+
 const readCacheStatus = (headers, key) => {
 	if (!headers) return null;
 	if (typeof headers.get === 'function') return headers.get(key);
@@ -102,10 +112,32 @@ const pathBucketOf = (rawUrl) => {
 };
 
 const recordOutcome = (startNs, req, status) => {
+	const key = String(status ?? 'unknown').toLowerCase();
+	if (key in counters) counters[key]++;
 	if (typeof server === 'undefined' || typeof server.recordAnalytics !== 'function') return;
 	const elapsedMs = performance.now() - startNs;
-	const event = `cache-${String(status ?? 'unknown').toLowerCase()}`;
-	server.recordAnalytics(elapsedMs, event, pathBucketOf(req.url));
+	server.recordAnalytics(elapsedMs, `cache-${key}`, pathBucketOf(req.url));
+};
+
+const handleStats = (req) => {
+	if (!req.user?.role?.permission?.super_user) {
+		const error = new Error('Unauthorized');
+		error.statusCode = 401;
+		throw error;
+	}
+	return {
+		status: 200,
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify(
+			{
+				counters: { ...counters },
+				pluginStartedAt: new Date(pluginStartTime).toISOString(),
+				uptimeMs: Date.now() - pluginStartTime,
+			},
+			null,
+			2
+		),
+	};
 };
 
 const handleInvalidate = async (req) => {
@@ -195,6 +227,7 @@ export const handleApplication = async (scope) => {
 	config.maxBodyBytes = scope.options.get(['maxBodyBytes']) ?? config.maxBodyBytes;
 	config.tagHeader = scope.options.get(['tagHeader']) ?? config.tagHeader;
 	config.invalidatePath = scope.options.get(['invalidatePath']) ?? config.invalidatePath;
+	config.statsPath = scope.options.get(['statsPath']) ?? config.statsPath;
 
 	if (!config.upstream && !config.upstreamAllowlist?.length && !config.trustForwardedHost) {
 		throw new Error(
@@ -250,6 +283,9 @@ export const handleApplication = async (scope) => {
 		const start = performance.now();
 		try {
 			const reqPath = req.url.split('?')[0];
+			if (reqPath === config.statsPath) {
+				return handleStats(req);
+			}
 			if (reqPath === config.invalidatePath) {
 				const response = await handleInvalidate(req);
 				recordOutcome(start, req, 'invalidate');

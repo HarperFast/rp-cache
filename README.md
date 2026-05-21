@@ -81,6 +81,10 @@ POST /.rp-cache/invalidate?url=https://origin.example.com/path   # single entry
 POST /.rp-cache/invalidate?tag=articles                           # all entries tagged "articles"
 ```
 
+### `statsPath: string`
+
+Path that exposes a JSON summary of cache outcome counters (`hit` / `miss` / `revalidated` / `bypass` / `invalidate` / `error`) plus uptime. Defaults to `'/.rp-cache/stats'`. Requires `super_user` permission.
+
 ### `varyHeaders: string[]`
 
 Request headers to fold into the cache key, so that requests with different values for these headers get separate cached responses. Defaults to `[]`.

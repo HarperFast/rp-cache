@@ -19,6 +19,7 @@ export const config = {
 	maxBodyBytes: null,
 	tagHeader: 'surrogate-key',
 	invalidatePath: '/.rp-cache/invalidate',
+	statsPath: '/.rp-cache/stats',
 };
 
 export const HOOK_NAMES = Object.freeze(['isCacheableRequest', 'isCacheableResponse', 'buildCacheKey']);
