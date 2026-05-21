@@ -136,12 +136,16 @@ export const isCacheableResponse = (res, context) => res.statusCode === 200;
 export const buildCacheKey = (req) => `${req.headers.get('x-forwarded-host')}${req.url}`;
 ```
 
-| Hook                  | Default                        | Effect of returning falsy / non-default                                              |
-| --------------------- | ------------------------------ | ------------------------------------------------------------------------------------ |
-| `isCacheableRequest`  | `req.method === 'GET'`         | Non-matching requests are rejected with `405`.                                       |
-| `isCacheableResponse` | `res.statusCode === 200`       | When falsy, the upstream response is served but not stored.                          |
-| `buildCacheKey`       | `https://<upstreamHost><path>` | Return a string the plugin will use as the cache key.                                |
-| `resolveFormat`       | `() => null`                   | Return a label (e.g. `'markdown'`) to fold into the cache key as `\|format=<label>`. |
+| Hook                       | Default                          | Effect of returning falsy / non-default                                                            |
+| -------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `isCacheableRequest`       | `req.method === 'GET' or 'HEAD'` | Non-matching requests are rejected with `405`.                                                     |
+| `isCacheableResponse`      | `res.statusCode === 200`         | When falsy, the upstream response is served but not stored.                                        |
+| `buildCacheKey`            | `https://<upstreamHost><path>`   | Return a string the plugin will use as the cache key.                                              |
+| `resolveFormat`            | `() => null`                     | Return a label (e.g. `'markdown'`) to fold into the cache key as `\|format=<label>`.               |
+| `resolveUpstream`          | `() => null`                     | Return a full upstream URL to use instead of the configured `upstream` / `upstreamAllowlist` flow. |
+| `freshnessLifetime`        | `() => null`                     | Return seconds; overrides the freshness calc, replacing `max-age`/`s-maxage`/`Expires`/heuristic.  |
+| `tagsForResponse`          | `() => null`                     | Return a `string[]`; replaces the `Surrogate-Key` header–derived tags for this response.           |
+| `transformResponseHeaders` | identity                         | Receive the final response `Headers` (post `X-Cache` / `Via`) and return modified headers.         |
 
 Standard HTTP semantics (`Cache-Control: no-store` / `no-cache`, ETag / `Last-Modified` revalidation) are always honored on top of the hook decisions.
 

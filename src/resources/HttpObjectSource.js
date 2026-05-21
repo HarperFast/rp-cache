@@ -157,6 +157,11 @@ export class HttpObjectSource extends Resource {
 		applyFreshnessFromResponse(upstreamRes, context);
 		checkVaryCompatibility(upstreamRes, context);
 
+		const freshnessOverride = hooks.freshnessLifetime(upstreamRes, context.requestContext);
+		if (typeof freshnessOverride === 'number' && Number.isFinite(freshnessOverride)) {
+			context.expiresAt = Date.now() + freshnessOverride * 1000;
+		}
+
 		if (upstreamRes.statusCode === 304 && context.replacingRecord) {
 			context.cacheStatus = 'REVALIDATED';
 			return context.replacingRecord;
@@ -167,8 +172,14 @@ export class HttpObjectSource extends Resource {
 		const swrSec = context.staleWhileRevalidateSeconds;
 		const sieSec = context.staleIfErrorSeconds;
 
-		const tagsHeader = upstreamRes.headers[config.tagHeader.toLowerCase()];
-		const tags = tagsHeader ? String(tagsHeader).split(/\s+/).filter(Boolean) : null;
+		const tagsFromHook = hooks.tagsForResponse(upstreamRes, context.requestContext);
+		let tags;
+		if (Array.isArray(tagsFromHook)) {
+			tags = tagsFromHook;
+		} else {
+			const tagsHeader = upstreamRes.headers[config.tagHeader.toLowerCase()];
+			tags = tagsHeader ? String(tagsHeader).split(/\s+/).filter(Boolean) : null;
+		}
 
 		return {
 			cacheKey,

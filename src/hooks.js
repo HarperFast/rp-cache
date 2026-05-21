@@ -3,6 +3,10 @@ export const hooks = {
 	isCacheableResponse: () => false,
 	buildCacheKey: () => '',
 	resolveFormat: () => null,
+	resolveUpstream: () => null,
+	freshnessLifetime: () => null,
+	tagsForResponse: () => null,
+	transformResponseHeaders: (headers) => headers,
 };
 
 export const config = {
@@ -36,4 +40,8 @@ export const HOOK_NAMES = Object.freeze([
 	'isCacheableResponse',
 	'buildCacheKey',
 	'resolveFormat',
+	'resolveUpstream',
+	'freshnessLifetime',
+	'tagsForResponse',
+	'transformResponseHeaders',
 ]);

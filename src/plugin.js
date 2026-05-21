@@ -76,6 +76,9 @@ const normalizeQueryForKey = (urlString) => {
 };
 
 const resolveUpstreamUrl = (req) => {
+	const fromHook = hooks.resolveUpstream(req);
+	if (fromHook) return fromHook;
+
 	if (config.upstream) {
 		const upstreamUrl = new URL(config.upstream);
 		const prefix = upstreamUrl.pathname === '/' ? '' : upstreamUrl.pathname.replace(/\/$/, '');
@@ -306,6 +309,10 @@ export const handleApplication = async (scope) => {
 					return null;
 				}
 			: () => null,
+		resolveUpstream: () => null,
+		freshnessLifetime: () => null,
+		tagsForResponse: () => null,
+		transformResponseHeaders: (headers) => headers,
 	};
 
 	const applyOverrides = (overrides) => {
@@ -385,10 +392,11 @@ export const handleApplication = async (scope) => {
 			const cacheKey = hooks.buildCacheKey(req);
 			const httpObject = await HttpObject.get(cacheKey, req);
 
-			const headers = httpObject.headers;
+			let headers = httpObject.headers;
 			const status = httpObject.cacheStatus ?? 'HIT';
 			headers.set(config.cacheStatusHeader, status);
 			appendVia(headers);
+			headers = hooks.transformResponseHeaders(headers, { req }) ?? headers;
 
 			recordOutcome(start, req, status);
 
