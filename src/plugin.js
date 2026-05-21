@@ -86,6 +86,13 @@ const formatProxyResponse = (upstreamRes, cacheStatusLabel) => {
 	};
 };
 
+const stripBodyForHead = (req, response) => {
+	if (req.method === 'HEAD') {
+		response.body = null;
+	}
+	return response;
+};
+
 const counters = {
 	hit: 0,
 	miss: 0,
@@ -244,7 +251,7 @@ export const handleApplication = async (scope) => {
 	const hooksFile = scope.options.get(['hooksFile']);
 
 	const defaults = {
-		isCacheableRequest: (req) => req.method === 'GET',
+		isCacheableRequest: (req) => req.method === 'GET' || req.method === 'HEAD',
 		isCacheableResponse: (res) => res.statusCode === 200,
 		buildCacheKey: (req) => {
 			const base = resolveUpstreamUrl(req);
@@ -322,7 +329,7 @@ export const handleApplication = async (scope) => {
 			if (directives.noStore) {
 				const response = await proxyBypass(req);
 				recordOutcome(start, req, 'bypass');
-				return response;
+				return stripBodyForHead(req, response);
 			}
 
 			if (directives.onlyIfCached) {
@@ -339,7 +346,7 @@ export const handleApplication = async (scope) => {
 				const response = await proxyForceRevalidate(req);
 				const status = readCacheStatus(response.headers, config.cacheStatusHeader) ?? 'MISS';
 				recordOutcome(start, req, status);
-				return response;
+				return stripBodyForHead(req, response);
 			}
 
 			const cacheKey = hooks.buildCacheKey(req);
@@ -352,11 +359,11 @@ export const handleApplication = async (scope) => {
 
 			recordOutcome(start, req, status);
 
-			return {
+			return stripBodyForHead(req, {
 				status: httpObject.statusCode,
 				headers,
 				body: httpObject.content,
-			};
+			});
 		} catch (err) {
 			recordOutcome(start, req, 'error');
 			throw err;
