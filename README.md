@@ -74,6 +74,18 @@ export const buildCacheKey = (req) => `${req.headers.get('x-forwarded-host')}${r
 
 Standard HTTP semantics (`Cache-Control: no-store` / `no-cache`, ETag / `Last-Modified` revalidation) are always honored on top of the hook decisions.
 
+## Request Cache-Control directives
+
+Honored on the incoming request:
+
+| Directive        | Behavior                                                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `no-store`       | Bypass the cache entirely: fetch upstream and serve, do not read or write. Response carries `X-Cache: BYPASS`.                  |
+| `no-cache`       | Force revalidation with origin (using stored ETag / `Last-Modified` if any), refreshing the cached entry. `MISS`/`REVALIDATED`. |
+| `only-if-cached` | Serve from cache only; if no cached entry exists, respond `504`.                                                                |
+
+`max-age`, `min-fresh`, and `max-stale` request directives are not yet honored; they require explicit freshness modeling that lands later in the roadmap.
+
 ## How requests are routed
 
 For each incoming request:

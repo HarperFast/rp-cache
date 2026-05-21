@@ -1,59 +1,35 @@
 import { requestUpstream } from '../util/upstream.js';
-import { hooks, config } from '../hooks.js';
+import { buildUpstreamRequest, cleanResponseHeadersAsString } from '../util/proxyHeaders.js';
+import { hooks } from '../hooks.js';
 
-const VIA_PROTOCOL = '1.1';
-
-const appendUpstreamVia = (headers) => {
-	const entry = `${VIA_PROTOCOL} ${config.viaIdentifier}`;
-	const existing = headers.get('via');
-	headers.set('via', existing ? `${existing}, ${entry}` : entry);
-};
-
-const headerParsers = {
-	'accept-encoding': (value) => {
-		if (!value) {
-			return [];
-		}
-
-		return value.split(',').map((e) => {
-			const end = e.indexOf(';');
-
-			if (end !== -1) {
-				e = e.substring(0, end);
-			}
-
-			return e.trim();
-		});
-	},
-	'cache-control': (value) => {
-		if (!value) return [];
-		return value
-			.trim()
-			.split(',')
-			.map((part) => {
-				let parsed;
-				const components = part.trim().split(';');
-				let component;
-				while ((component = components.pop())) {
-					if (component.includes('=')) {
-						let [name, value] = component.trim().split('=');
-						name = name.trim();
-						if (value) value = value.trim();
-						parsed = {
-							name: name.toLowerCase(),
-							value,
-							next: parsed,
-						};
-					} else {
-						parsed = {
-							name: component.toLowerCase(),
-							next: parsed,
-						};
-					}
+const parseCacheControl = (value) => {
+	if (!value) return [];
+	return value
+		.trim()
+		.split(',')
+		.map((part) => {
+			let parsed;
+			const components = part.trim().split(';');
+			let component;
+			while ((component = components.pop())) {
+				if (component.includes('=')) {
+					let [name, partValue] = component.trim().split('=');
+					name = name.trim();
+					if (partValue) partValue = partValue.trim();
+					parsed = {
+						name: name.toLowerCase(),
+						value: partValue,
+						next: parsed,
+					};
+				} else {
+					parsed = {
+						name: component.toLowerCase(),
+						next: parsed,
+					};
 				}
-				return parsed;
-			});
-	},
+			}
+			return parsed;
+		});
 };
 
 const ensureJsonHeaders = (headers) => {
@@ -75,60 +51,15 @@ const ensureJsonHeaders = (headers) => {
 	return headers;
 };
 
-const hopByHopHeaders = [
-	'connection',
-	'keep-alive',
-	'proxy-authenticate',
-	'proxy-authorization',
-	'proxy-connection',
-	'te',
-	'trailer',
-	'transfer-encoding',
-	'upgrade',
-];
-
-const upstreamRequestHeaderBlackList = [
-	'cookie',
-	'x-forwarded-host',
-	'authorization',
-	'if-none-match',
-	'if-modified-since',
-	'host',
-	'accept-encoding',
-];
-
-const ignoredDownstreamReqHeaders = new Set([...hopByHopHeaders, ...upstreamRequestHeaderBlackList]);
-
-const resolveUpstreamRequestConfig = (cacheKey, context) => {
-	const { requestContext: request } = context;
-	const [url] = cacheKey.split('|');
-
-	const headers = new Headers();
-
-	request.headers.forEach((value, key) => {
-		if (ignoredDownstreamReqHeaders.has(key)) return;
-
-		headers.set(key, value);
-	});
-
-	headers.set('accept-encoding', 'gzip, br');
-	appendUpstreamVia(headers);
-
-	if (context.replacingRecord) {
-		const etag = ensureJsonHeaders(context.replacingRecord.headers)['etag'];
-		if (etag) {
-			headers.set('If-None-Match', etag);
-		}
-		if (context.replacingRecord.lastCached) {
-			headers.set('If-Modified-Since', new Date(context.replacingRecord.lastCached).toUTCString());
-		}
+const buildConditionalsFromRecord = (replacingRecord) => {
+	if (!replacingRecord) return {};
+	const conditionals = {};
+	const etag = ensureJsonHeaders(replacingRecord.headers)['etag'];
+	if (etag) conditionals.etag = etag;
+	if (replacingRecord.lastCached) {
+		conditionals.lastModified = new Date(replacingRecord.lastCached).toUTCString();
 	}
-
-	return {
-		url,
-		method: 'GET',
-		headers,
-	};
+	return conditionals;
 };
 
 const applyFreshnessFromResponse = (upstreamRes, context) => {
@@ -137,7 +68,7 @@ const applyFreshnessFromResponse = (upstreamRes, context) => {
 	let maxAge;
 
 	if (cacheControl) {
-		headerParsers['cache-control'](cacheControl).forEach((part) => {
+		parseCacheControl(cacheControl).forEach((part) => {
 			switch (part.name) {
 				case 'no-store':
 				case 'private':
@@ -174,25 +105,13 @@ const applyFreshnessFromResponse = (upstreamRes, context) => {
 	}
 };
 
-const resolveCachedHeaders = (upstreamResponseHeaders) => {
-	let headersString = '';
-
-	for (const [key, value] of Object.entries(upstreamResponseHeaders)) {
-		if (hopByHopHeaders.includes(key.toLowerCase())) {
-			continue;
-		}
-		if (key === 'set-cookie') continue;
-		headersString = `${headersString}${headersString ? '\n' : ''}${key}: ${value}`;
-	}
-
-	return headersString;
-};
-
 export class HttpObjectSource extends Resource {
 	static async get(cacheKey, context) {
 		context.cacheStatus = 'MISS';
 
-		const upstreamReqConfig = resolveUpstreamRequestConfig(cacheKey, context);
+		const [url] = cacheKey.split('|');
+		const conditionals = buildConditionalsFromRecord(context.replacingRecord);
+		const upstreamReqConfig = buildUpstreamRequest(url, context.requestContext, conditionals);
 		const upstreamRes = await requestUpstream(upstreamReqConfig);
 
 		if (!hooks.isCacheableResponse(upstreamRes, context)) {
@@ -209,7 +128,7 @@ export class HttpObjectSource extends Resource {
 		return {
 			cacheKey,
 			statusCode: upstreamRes.statusCode,
-			headers: resolveCachedHeaders(upstreamRes.headers),
+			headers: cleanResponseHeadersAsString(upstreamRes.headers),
 			content: await createBlob(upstreamRes.body),
 			lastCached: Date.now(),
 		};

@@ -1,13 +1,48 @@
 import { HttpObjectSource } from './resources/HttpObjectSource.js';
 import { HttpObject } from './resources/HttpObject.js';
 import { hooks, config, HOOK_NAMES } from './hooks.js';
+import { requestUpstream } from './util/upstream.js';
+import { buildUpstreamRequest, cleanResponseHeaders, appendVia } from './util/proxyHeaders.js';
 
-const VIA_PROTOCOL = '1.1';
-
-const appendVia = (headers) => {
-	const entry = `${VIA_PROTOCOL} ${config.viaIdentifier}`;
-	const existing = headers.get('via');
-	headers.set('via', existing ? `${existing}, ${entry}` : entry);
+const parseClientCacheControl = (req) => {
+	const result = {
+		noStore: false,
+		noCache: false,
+		onlyIfCached: false,
+		maxAge: null,
+		minFresh: null,
+		maxStale: null,
+	};
+	const cc = req.headers.get('cache-control');
+	if (!cc) return result;
+	for (const raw of cc.split(',')) {
+		const part = raw.trim();
+		if (!part) continue;
+		const [rawName, rawValue] = part.split('=');
+		const name = rawName.trim().toLowerCase();
+		const value = rawValue?.trim();
+		switch (name) {
+			case 'no-store':
+				result.noStore = true;
+				break;
+			case 'no-cache':
+				result.noCache = true;
+				break;
+			case 'only-if-cached':
+				result.onlyIfCached = true;
+				break;
+			case 'max-age':
+				result.maxAge = Number(value);
+				break;
+			case 'min-fresh':
+				result.minFresh = Number(value);
+				break;
+			case 'max-stale':
+				result.maxStale = value !== undefined ? Number(value) : Infinity;
+				break;
+		}
+	}
+	return result;
 };
 
 const resolveUpstreamUrl = (req) => {
@@ -37,6 +72,55 @@ const resolveUpstreamUrl = (req) => {
 	}
 
 	return `https://${headerHost}${req.url}`;
+};
+
+const formatProxyResponse = async (upstreamRes, cacheStatusLabel) => {
+	const headers = cleanResponseHeaders(upstreamRes.headers);
+	headers.set(config.cacheStatusHeader, cacheStatusLabel);
+	appendVia(headers);
+	const body =
+		upstreamRes.body && typeof upstreamRes.body.arrayBuffer === 'function'
+			? Buffer.from(await upstreamRes.body.arrayBuffer())
+			: upstreamRes.body;
+	return {
+		status: upstreamRes.statusCode,
+		headers,
+		body,
+	};
+};
+
+const proxyBypass = async (req) => {
+	const upstreamUrl = resolveUpstreamUrl(req);
+	const upstreamReqConfig = buildUpstreamRequest(upstreamUrl, req);
+	const upstreamRes = await requestUpstream(upstreamReqConfig);
+	return formatProxyResponse(upstreamRes, 'BYPASS');
+};
+
+const proxyForceRevalidate = async (req) => {
+	const cacheKey = hooks.buildCacheKey(req);
+	const upstreamUrl = resolveUpstreamUrl(req);
+	const existing = await databases.cache.HttpResourceCache.get(cacheKey, { onlyIfCached: true });
+	const conditionals = {};
+	if (existing) {
+		try {
+			const existingHeaders = typeof existing.headers === 'string' ? JSON.parse(existing.headers) : existing.headers;
+			if (existingHeaders?.etag) conditionals.etag = existingHeaders.etag;
+		} catch {
+			// headers stored as line-delimited string; tolerate
+		}
+		if (existing.lastCached) conditionals.lastModified = new Date(existing.lastCached).toUTCString();
+	}
+	const upstreamReqConfig = buildUpstreamRequest(upstreamUrl, req, conditionals);
+	const upstreamRes = await requestUpstream(upstreamReqConfig);
+	// If upstream returns 304 and we have an existing entry, serve it via the normal cached path
+	if (upstreamRes.statusCode === 304 && existing) {
+		const httpObject = await HttpObject.get(cacheKey, req);
+		const headers = httpObject.headers;
+		headers.set(config.cacheStatusHeader, 'REVALIDATED');
+		appendVia(headers);
+		return { status: httpObject.statusCode, headers, body: httpObject.content };
+	}
+	return formatProxyResponse(upstreamRes, 'MISS');
 };
 
 export const handleApplication = async (scope) => {
@@ -93,6 +177,27 @@ export const handleApplication = async (scope) => {
 			const error = new Error('Method not allowed');
 			error.statusCode = 405;
 			throw error;
+		}
+
+		const directives = parseClientCacheControl(req);
+
+		if (directives.noStore) {
+			return proxyBypass(req);
+		}
+
+		if (directives.onlyIfCached) {
+			const cacheKey = hooks.buildCacheKey(req);
+			const existing = await databases.cache.HttpResourceCache.get(cacheKey, { onlyIfCached: true });
+			if (!existing) {
+				const error = new Error('Gateway Timeout');
+				error.statusCode = 504;
+				throw error;
+			}
+			// fall through to normal flow; Harper will serve from cache
+		}
+
+		if (directives.noCache) {
+			return proxyForceRevalidate(req);
 		}
 
 		const cacheKey = hooks.buildCacheKey(req);
