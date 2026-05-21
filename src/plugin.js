@@ -46,6 +46,35 @@ const parseClientCacheControl = (req) => {
 	return result;
 };
 
+const normalizeQueryForKey = (urlString) => {
+	const qIdx = urlString.indexOf('?');
+	if (qIdx === -1) return urlString;
+	const path = urlString.slice(0, qIdx);
+	const search = urlString.slice(qIdx + 1);
+	if (!search) return path;
+
+	const params = new URLSearchParams(search);
+
+	if (config.cacheKeyQueryStripParams?.length) {
+		for (const name of config.cacheKeyQueryStripParams) params.delete(name);
+	}
+
+	if (config.cacheKeyQueryAllowlist?.length) {
+		const allowed = new Set(config.cacheKeyQueryAllowlist);
+		for (const key of [...params.keys()]) {
+			if (!allowed.has(key)) params.delete(key);
+		}
+	}
+
+	const entries = [...params.entries()];
+	if (config.sortQueryParams !== false) {
+		entries.sort(([a], [b]) => a.localeCompare(b));
+	}
+
+	if (entries.length === 0) return path;
+	return `${path}?${entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')}`;
+};
+
 const resolveUpstreamUrl = (req) => {
 	if (config.upstream) {
 		const upstreamUrl = new URL(config.upstream);
@@ -241,6 +270,10 @@ export const handleApplication = async (scope) => {
 	config.sitemapWarmIntervalMs = scope.options.get(['sitemapWarmIntervalMs']) ?? config.sitemapWarmIntervalMs;
 	config.sitemapWarmAtStartup = scope.options.get(['sitemapWarmAtStartup']) ?? config.sitemapWarmAtStartup;
 	config.sitemapWarmFormats = scope.options.get(['sitemapWarmFormats']) ?? null;
+	config.cacheKeyQueryStripParams = scope.options.get(['cacheKeyQueryStripParams']) ?? config.cacheKeyQueryStripParams;
+	config.cacheKeyQueryAllowlist = scope.options.get(['cacheKeyQueryAllowlist']) ?? null;
+	const sortQueryRaw = scope.options.get(['sortQueryParams']);
+	config.sortQueryParams = typeof sortQueryRaw === 'boolean' ? sortQueryRaw : true;
 
 	if (!config.upstream && !config.upstreamAllowlist?.length && !config.trustForwardedHost) {
 		throw new Error(
@@ -254,7 +287,7 @@ export const handleApplication = async (scope) => {
 		isCacheableRequest: (req) => req.method === 'GET' || req.method === 'HEAD',
 		isCacheableResponse: (res) => res.statusCode === 200,
 		buildCacheKey: (req) => {
-			const base = resolveUpstreamUrl(req);
+			const base = normalizeQueryForKey(resolveUpstreamUrl(req));
 			const parts = [base];
 			for (const name of [...(config.varyHeaders ?? [])].sort()) {
 				const value = (req.headers.get(name) ?? '').trim().toLowerCase();

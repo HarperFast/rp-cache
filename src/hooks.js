@@ -26,6 +26,9 @@ export const config = {
 	sitemapWarmIntervalMs: 3600000,
 	sitemapWarmAtStartup: true,
 	sitemapWarmFormats: null,
+	cacheKeyQueryStripParams: [],
+	cacheKeyQueryAllowlist: null,
+	sortQueryParams: true,
 };
 
 export const HOOK_NAMES = Object.freeze([
