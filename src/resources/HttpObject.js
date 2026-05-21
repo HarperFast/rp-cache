@@ -1,6 +1,12 @@
 const allowed304Headers = ['cache-control', 'expires', 'date', 'etag', 'last-modified', 'vary', 'age'];
 
 export class HttpObject extends databases.cache.HttpResourceCache {
+	allowStaleWhileRevalidate(entry) {
+		const until = entry?.value?.staleWhileRevalidateUntil;
+		if (!until) return false;
+		return new Date(until).valueOf() > Date.now();
+	}
+
 	async get(cacheKey) {
 		const context = this.getContext();
 

@@ -105,6 +105,16 @@ const applyFreshnessFromResponse = (upstreamRes, context) => {
 					if (!Number.isNaN(parsed)) sMaxAge = parsed;
 					break;
 				}
+				case 'stale-while-revalidate': {
+					const parsed = Number(part.value);
+					if (!Number.isNaN(parsed)) context.staleWhileRevalidateSeconds = parsed;
+					break;
+				}
+				case 'stale-if-error': {
+					const parsed = Number(part.value);
+					if (!Number.isNaN(parsed)) context.staleIfErrorSeconds = parsed;
+					break;
+				}
 			}
 		});
 	} else if (upstreamRes.headers['pragma']) {
@@ -144,12 +154,19 @@ export class HttpObjectSource extends Resource {
 			return context.replacingRecord;
 		}
 
+		const now = Date.now();
+		const expiresAt = context.expiresAt ?? null;
+		const swrSec = context.staleWhileRevalidateSeconds;
+		const sieSec = context.staleIfErrorSeconds;
+
 		return {
 			cacheKey,
 			statusCode: upstreamRes.statusCode,
 			headers: cleanResponseHeadersAsString(upstreamRes.headers),
 			content: await createBlob(upstreamRes.body),
-			lastCached: Date.now(),
+			lastCached: now,
+			staleWhileRevalidateUntil: typeof swrSec === 'number' && expiresAt ? new Date(expiresAt + swrSec * 1000) : null,
+			staleIfErrorUntil: typeof sieSec === 'number' && expiresAt ? new Date(expiresAt + sieSec * 1000) : null,
 		};
 	}
 }

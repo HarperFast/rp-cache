@@ -80,6 +80,13 @@ export const buildCacheKey = (req) => `${req.headers.get('x-forwarded-host')}${r
 
 Standard HTTP semantics (`Cache-Control: no-store` / `no-cache`, ETag / `Last-Modified` revalidation) are always honored on top of the hook decisions.
 
+## Response Cache-Control
+
+The plugin honors `no-store`, `private`, `no-cache`, `max-age`, `s-maxage`, `Expires`, and `Pragma: no-cache` for freshness. It also recognizes `stale-while-revalidate=N` and parses `stale-if-error=N`:
+
+- `stale-while-revalidate=N`: while a stored entry has expired but is within `N` seconds of expiry, the plugin serves it stale and asynchronously revalidates in the background (via Harper's `allowStaleWhileRevalidate` hook).
+- `stale-if-error=N`: the SIE timestamp is stored alongside each entry. Serving the stale entry on upstream errors is on the roadmap; the data is in place for the wiring.
+
 ## Request Cache-Control directives
 
 Honored on the incoming request:

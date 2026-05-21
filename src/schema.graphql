@@ -4,4 +4,6 @@ type HttpResourceCache @table(database: "cache") @export {
 	headers: Any
 	content: Blob
 	lastCached: Date
+	staleWhileRevalidateUntil: Date
+	staleIfErrorUntil: Date
 }
