@@ -48,6 +48,22 @@ Name of the response header used to report cache status (`HIT` / `MISS` / `REVAL
 
 Pseudonym appended to the `Via` header on both the upstream request and the client response. Defaults to `'rp-cache'`.
 
+### `upstreamHeadersTimeoutMs: number`
+
+Maximum time (ms) to wait for the upstream response headers. Defaults to `5000`.
+
+### `upstreamBodyTimeoutMs: number`
+
+Maximum time (ms) to wait for the upstream response body. Defaults to `30000`.
+
+### `upstreamRetries: number`
+
+Maximum number of additional retry attempts after a network/timeout error. Each retry is backed off exponentially from `upstreamRetryBaseDelayMs`. Only retries on retryable connection / timeout errors; non-network errors propagate immediately. Defaults to `2`.
+
+### `upstreamRetryBaseDelayMs: number`
+
+Base delay (ms) for retry backoff. Defaults to `100`.
+
 ### `varyHeaders: string[]`
 
 Request headers to fold into the cache key, so that requests with different values for these headers get separate cached responses. Defaults to `[]`.

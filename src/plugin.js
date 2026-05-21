@@ -127,6 +127,10 @@ export const handleApplication = async (scope) => {
 	config.upstreamAllowlist = scope.options.get(['upstreamAllowlist']) ?? null;
 	config.trustForwardedHost = !!scope.options.get(['trustForwardedHost']);
 	config.varyHeaders = scope.options.get(['varyHeaders']) ?? [];
+	config.upstreamHeadersTimeoutMs = scope.options.get(['upstreamHeadersTimeoutMs']) ?? config.upstreamHeadersTimeoutMs;
+	config.upstreamBodyTimeoutMs = scope.options.get(['upstreamBodyTimeoutMs']) ?? config.upstreamBodyTimeoutMs;
+	config.upstreamRetries = scope.options.get(['upstreamRetries']) ?? config.upstreamRetries;
+	config.upstreamRetryBaseDelayMs = scope.options.get(['upstreamRetryBaseDelayMs']) ?? config.upstreamRetryBaseDelayMs;
 
 	if (!config.upstream && !config.upstreamAllowlist?.length && !config.trustForwardedHost) {
 		throw new Error(
