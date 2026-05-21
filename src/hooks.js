@@ -17,6 +17,8 @@ export const config = {
 	upstreamRetries: 2,
 	upstreamRetryBaseDelayMs: 100,
 	maxBodyBytes: null,
+	tagHeader: 'surrogate-key',
+	invalidatePath: '/.rp-cache/invalidate',
 };
 
 export const HOOK_NAMES = Object.freeze(['isCacheableRequest', 'isCacheableResponse', 'buildCacheKey']);

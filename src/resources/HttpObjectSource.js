@@ -159,6 +159,9 @@ export class HttpObjectSource extends Resource {
 		const swrSec = context.staleWhileRevalidateSeconds;
 		const sieSec = context.staleIfErrorSeconds;
 
+		const tagsHeader = upstreamRes.headers[config.tagHeader.toLowerCase()];
+		const tags = tagsHeader ? String(tagsHeader).split(/\s+/).filter(Boolean) : null;
+
 		return {
 			cacheKey,
 			statusCode: upstreamRes.statusCode,
@@ -167,6 +170,7 @@ export class HttpObjectSource extends Resource {
 			lastCached: now,
 			staleWhileRevalidateUntil: typeof swrSec === 'number' && expiresAt ? new Date(expiresAt + swrSec * 1000) : null,
 			staleIfErrorUntil: typeof sieSec === 'number' && expiresAt ? new Date(expiresAt + sieSec * 1000) : null,
+			tags,
 		};
 	}
 }

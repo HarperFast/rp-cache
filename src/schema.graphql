@@ -6,4 +6,5 @@ type HttpResourceCache @table(database: "cache") @export {
 	lastCached: Date
 	staleWhileRevalidateUntil: Date
 	staleIfErrorUntil: Date
+	tags: [String]
 }

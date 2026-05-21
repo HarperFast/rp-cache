@@ -85,6 +85,44 @@ const formatProxyResponse = (upstreamRes, cacheStatusLabel) => {
 	};
 };
 
+const handleInvalidate = async (req) => {
+	if (!req.user?.role?.permission?.super_user) {
+		const error = new Error('Unauthorized');
+		error.statusCode = 401;
+		throw error;
+	}
+
+	const url = new URL(req.url, 'http://placeholder');
+	const targetUrl = url.searchParams.get('url');
+	const targetTag = url.searchParams.get('tag');
+
+	if (targetUrl) {
+		await databases.cache.HttpResourceCache.delete(targetUrl);
+		return { status: 200, headers: { 'content-type': 'text/plain' }, body: `Invalidated ${targetUrl}\n` };
+	}
+
+	if (targetTag) {
+		const results = databases.cache.HttpResourceCache.search(
+			{ tags: targetTag },
+			{ onlyIfCached: true, noCacheStore: true }
+		);
+		let count = 0;
+		for await (const entry of results) {
+			await databases.cache.HttpResourceCache.delete(entry.cacheKey);
+			count++;
+		}
+		return {
+			status: 200,
+			headers: { 'content-type': 'text/plain' },
+			body: `Invalidated ${count} entries tagged ${targetTag}\n`,
+		};
+	}
+
+	const error = new Error("Specify '?url=...' or '?tag=...'");
+	error.statusCode = 400;
+	throw error;
+};
+
 const proxyBypass = async (req) => {
 	const upstreamUrl = resolveUpstreamUrl(req);
 	const upstreamReqConfig = buildUpstreamRequest(upstreamUrl, req);
@@ -132,6 +170,8 @@ export const handleApplication = async (scope) => {
 	config.upstreamRetries = scope.options.get(['upstreamRetries']) ?? config.upstreamRetries;
 	config.upstreamRetryBaseDelayMs = scope.options.get(['upstreamRetryBaseDelayMs']) ?? config.upstreamRetryBaseDelayMs;
 	config.maxBodyBytes = scope.options.get(['maxBodyBytes']) ?? config.maxBodyBytes;
+	config.tagHeader = scope.options.get(['tagHeader']) ?? config.tagHeader;
+	config.invalidatePath = scope.options.get(['invalidatePath']) ?? config.invalidatePath;
 
 	if (!config.upstream && !config.upstreamAllowlist?.length && !config.trustForwardedHost) {
 		throw new Error(
@@ -184,6 +224,11 @@ export const handleApplication = async (scope) => {
 	}
 
 	scope.server.http(async (req) => {
+		const reqPath = req.url.split('?')[0];
+		if (reqPath === config.invalidatePath) {
+			return handleInvalidate(req);
+		}
+
 		if (!hooks.isCacheableRequest(req)) {
 			const error = new Error('Method not allowed');
 			error.statusCode = 405;

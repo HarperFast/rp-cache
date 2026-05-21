@@ -68,6 +68,19 @@ Base delay (ms) for retry backoff. Defaults to `100`.
 
 Hard limit on the upstream response body size. When set, responses larger than this are aborted by undici (the request fails). Defaults to `null` (unbounded). True streaming pass-through (proxying without buffering, for very large objects) is on the roadmap.
 
+### `tagHeader: string`
+
+Response header read from the upstream to associate the cached entry with surrogate tags. Defaults to `'surrogate-key'`. Multiple tags are whitespace-separated (Fastly convention).
+
+### `invalidatePath: string`
+
+Path that exposes the cache invalidation endpoint. Defaults to `'/.rp-cache/invalidate'`. Requires the requesting user to have `super_user` permission.
+
+```
+POST /.rp-cache/invalidate?url=https://origin.example.com/path   # single entry
+POST /.rp-cache/invalidate?tag=articles                           # all entries tagged "articles"
+```
+
 ### `varyHeaders: string[]`
 
 Request headers to fold into the cache key, so that requests with different values for these headers get separate cached responses. Defaults to `[]`.
