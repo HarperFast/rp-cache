@@ -74,18 +74,14 @@ const resolveUpstreamUrl = (req) => {
 	return `https://${headerHost}${req.url}`;
 };
 
-const formatProxyResponse = async (upstreamRes, cacheStatusLabel) => {
+const formatProxyResponse = (upstreamRes, cacheStatusLabel) => {
 	const headers = cleanResponseHeaders(upstreamRes.headers);
 	headers.set(config.cacheStatusHeader, cacheStatusLabel);
 	appendVia(headers);
-	const body =
-		upstreamRes.body && typeof upstreamRes.body.arrayBuffer === 'function'
-			? Buffer.from(await upstreamRes.body.arrayBuffer())
-			: upstreamRes.body;
 	return {
 		status: upstreamRes.statusCode,
 		headers,
-		body,
+		body: upstreamRes.body,
 	};
 };
 
