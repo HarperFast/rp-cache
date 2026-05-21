@@ -1,12 +1,13 @@
 {
-	"name": "@harperfast/replace-me",
+	"name": "@harperfast/rp-cache",
 	"version": "0.0.1",
 	"private": true,
 	"type": "module",
+	"description": "A Harper plugin that provides a reverse-proxy HTTP object cache.",
 	"license": "Apache-2.0",
 	"homepage": "https://harpersystems.dev/",
 	"bugs": {
-		"url": "https://github.com/harperdb/replace-me/issues",
+		"url": "https://github.com/HarperFast/rp-cache/issues",
 		"email": "opensource@harperdb.io"
 	},
 	"author": {
@@ -17,7 +18,7 @@
 	"contributors": [],
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/harperdb/replace-me.git"
+		"url": "https://github.com/HarperFast/rp-cache.git"
 	},
 	"scripts": {
 		"lint": "eslint .",
@@ -27,6 +28,7 @@
 	"devDependencies": {
 		"@harperdb/code-guidelines": "^0.0.5",
 		"eslint": "^9.35.0",
+		"harper": "^5.0.21",
 		"prettier": "^3.6.2"
 	},
 	"engines": {
@@ -42,5 +44,8 @@
 			"name": "npm",
 			"onFail": "error"
 		}
+	},
+	"dependencies": {
+		"undici": "^7.19.2"
 	}
 }

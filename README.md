@@ -1,18 +1,40 @@
-# `@harperfast/replace-me`
+# `@harperfast/rp-cache`
 
-> This template is for creating **open source** repositories at Harper.
+A Harper plugin that provides a reverse-proxy HTTP object cache.
 
-## Template Overview
+Incoming requests are forwarded to an upstream origin determined by a request header (default `x-forwarded-host`). The response is cached in a Harper table; subsequent requests for the same URL are served from the cache. ETag and `Last-Modified` revalidation against upstream, `Cache-Control` (`no-store`, `no-cache`, `max-age`) handling, and conditional `304` responses to clients are supported.
 
-This template is a starting point for creating open source repositories at Harper. The only part that must be retained is the Apache 2.0 license file located at [./LICENSE](./LICENSE). Everything else can be modified or removed as needed.
+## Installation
 
-This template sets up a few key dev tools aligned with Harper's engineering guidelines.
+In the consuming Harper application:
 
-1. [ESLint](https://eslint.org/) for linting
-2. [Prettier](https://prettier.io/) for code formatting
+```sh
+npm install @harperfast/rp-cache
+```
 
-The default configs are not meant to be immutable but rather a starting point, but keep in mind that we strive for consistency across Harper's open source projects.
+Then reference the component in the application's `config.yaml`:
 
-A majority of the fields in `package.json` are filled in automatically. Make sure to replace the `replace-me` throughout the file with your project name.
+```yaml
+'@harperfast/rp-cache':
+  package: '@harperfast/rp-cache'
+  files: '/*'
+```
 
-> The `engines` and `devEngines` fields are aligned with the core Harper repo Node.js version support and may change over time.
+## Options
+
+All options are optional.
+
+### `upstreamHostHeader: string`
+
+Request header to read for the upstream host. Defaults to `'x-forwarded-host'`.
+
+## How requests are routed
+
+For each incoming `GET`:
+
+1. The configured upstream-host header is read; missing → `403`.
+2. The cache key is `https://<host><path>`.
+3. The cache table (`cache.HttpResourceCache`) is consulted; on miss, the request is issued upstream via [undici](https://github.com/nodejs/undici) and the response is stored.
+4. Non-`GET` methods return `405`.
+
+The cache table schema is defined in [src/schema.graphql](src/schema.graphql) and is created automatically by Harper from the schema.

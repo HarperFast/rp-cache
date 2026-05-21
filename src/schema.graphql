@@ -1,0 +1,7 @@
+type HttpResourceCache @table(database: "cache") @export {
+	cacheKey: String! @primaryKey
+	statusCode: Int!
+	headers: Any
+	content: Blob
+	lastCached: Date
+}

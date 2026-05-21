@@ -1,0 +1,3 @@
+pluginModule: ./src/plugin.js
+graphqlSchema:
+  files: 'src/schema.graphql'
