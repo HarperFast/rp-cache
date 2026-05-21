@@ -4,4 +4,10 @@ export const hooks = {
 	buildCacheKey: () => '',
 };
 
+export const config = {
+	upstreamHostHeader: 'x-forwarded-host',
+	cacheStatusHeader: 'X-Cache',
+	viaIdentifier: 'rp-cache',
+};
+
 export const HOOK_NAMES = Object.freeze(['isCacheableRequest', 'isCacheableResponse', 'buildCacheKey']);

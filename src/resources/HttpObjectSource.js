@@ -1,5 +1,13 @@
 import { requestUpstream } from '../util/upstream.js';
-import { hooks } from '../hooks.js';
+import { hooks, config } from '../hooks.js';
+
+const VIA_PROTOCOL = '1.1';
+
+const appendUpstreamVia = (headers) => {
+	const entry = `${VIA_PROTOCOL} ${config.viaIdentifier}`;
+	const existing = headers.get('via');
+	headers.set('via', existing ? `${existing}, ${entry}` : entry);
+};
 
 const headerParsers = {
 	'accept-encoding': (value) => {
@@ -104,6 +112,7 @@ const resolveUpstreamRequestConfig = (cacheKey, context) => {
 	});
 
 	headers.set('accept-encoding', 'gzip, br');
+	appendUpstreamVia(headers);
 
 	if (context.replacingRecord) {
 		const etag = ensureJsonHeaders(context.replacingRecord.headers)['etag'];
@@ -138,6 +147,8 @@ const resolveCachedHeaders = (upstreamResponseHeaders) => {
 
 export class HttpObjectSource extends Resource {
 	static async get(cacheKey, context) {
+		context.cacheStatus = 'MISS';
+
 		const upstreamReqConfig = resolveUpstreamRequestConfig(cacheKey, context);
 		const upstreamRes = await requestUpstream(upstreamReqConfig);
 
@@ -154,7 +165,7 @@ export class HttpObjectSource extends Resource {
 		}
 
 		if (upstreamRes.statusCode === 304 && context.replacingRecord) {
-			// not modified, use existing cached record
+			context.cacheStatus = 'REVALIDATED';
 			return context.replacingRecord;
 		}
 

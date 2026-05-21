@@ -84,6 +84,7 @@ export class HttpObject extends databases.cache.HttpResourceCache {
 			statusCode,
 			headers,
 			content,
+			cacheStatus: context.cacheStatus ?? 'HIT',
 		};
 	}
 }

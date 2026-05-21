@@ -28,6 +28,14 @@ All options are optional.
 
 Request header to read for the upstream host. Defaults to `'x-forwarded-host'`.
 
+### `cacheStatusHeader: string`
+
+Name of the response header used to report cache status (`HIT` / `MISS` / `REVALIDATED`). Defaults to `'X-Cache'`.
+
+### `viaIdentifier: string`
+
+Pseudonym appended to the `Via` header on both the upstream request and the client response. Defaults to `'rp-cache'`.
+
 ### `hooksFile: string`
 
 Path (relative to the consuming app) to a JS file that exports any of the policy hooks listed below. The file is watched; saves are picked up without restarting Harper. Functions that aren't exported fall back to the plugin's defaults.

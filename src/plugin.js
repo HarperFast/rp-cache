@@ -1,18 +1,27 @@
 import { HttpObjectSource } from './resources/HttpObjectSource.js';
 import { HttpObject } from './resources/HttpObject.js';
-import { hooks, HOOK_NAMES } from './hooks.js';
+import { hooks, config, HOOK_NAMES } from './hooks.js';
 
-const DEFAULT_UPSTREAM_HOST_HEADER = 'x-forwarded-host';
+const VIA_PROTOCOL = '1.1';
+
+const appendVia = (headers) => {
+	const entry = `${VIA_PROTOCOL} ${config.viaIdentifier}`;
+	const existing = headers.get('via');
+	headers.set('via', existing ? `${existing}, ${entry}` : entry);
+};
 
 export const handleApplication = async (scope) => {
-	const upstreamHostHeader = scope.options.get(['upstreamHostHeader']) ?? DEFAULT_UPSTREAM_HOST_HEADER;
+	config.upstreamHostHeader = scope.options.get(['upstreamHostHeader']) ?? config.upstreamHostHeader;
+	config.cacheStatusHeader = scope.options.get(['cacheStatusHeader']) ?? config.cacheStatusHeader;
+	config.viaIdentifier = scope.options.get(['viaIdentifier']) ?? config.viaIdentifier;
+
 	const hooksFile = scope.options.get(['hooksFile']);
 
 	const defaults = {
 		isCacheableRequest: (req) => req.method === 'GET',
 		isCacheableResponse: (res) => res.statusCode === 200,
 		buildCacheKey: (req) => {
-			const upstreamHost = req.headers.get(upstreamHostHeader);
+			const upstreamHost = req.headers.get(config.upstreamHostHeader);
 			if (!upstreamHost) {
 				const error = new Error('Invalid host');
 				error.statusCode = 403;
@@ -59,9 +68,13 @@ export const handleApplication = async (scope) => {
 		const cacheKey = hooks.buildCacheKey(req);
 		const httpObject = await HttpObject.get(cacheKey, req);
 
+		const headers = httpObject.headers;
+		headers.set(config.cacheStatusHeader, httpObject.cacheStatus ?? 'HIT');
+		appendVia(headers);
+
 		return {
 			status: httpObject.statusCode,
-			headers: httpObject.headers,
+			headers,
 			body: httpObject.content,
 		};
 	});
