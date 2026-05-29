@@ -7,6 +7,7 @@ export const hooks = {
 	freshnessLifetime: () => null,
 	tagsForResponse: () => null,
 	transformResponseHeaders: (headers) => headers,
+	populateRelated: () => null,
 };
 
 export const config = {
@@ -44,4 +45,5 @@ export const HOOK_NAMES = Object.freeze([
 	'freshnessLifetime',
 	'tagsForResponse',
 	'transformResponseHeaders',
+	'populateRelated',
 ]);

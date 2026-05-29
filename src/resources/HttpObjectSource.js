@@ -127,51 +127,89 @@ export class HttpObjectSource extends Resource {
 	static async get(cacheKey, context) {
 		context.cacheStatus = 'MISS';
 
-		const [url] = cacheKey.split('|');
-		const conditionals = buildConditionalsFromRecord(context.replacingRecord);
-		const upstreamReqConfig = buildUpstreamRequest(url, context.requestContext, conditionals);
-		const upstreamRes = await requestUpstream(upstreamReqConfig);
+		// `populateRelated` is a fire-and-forget hook that fires at the start of
+		// miss-resolution so consumers can kick off related work in parallel with
+		// the upstream fetch (e.g. cross-warming a different cache variant).
+		// `primaryResponse` resolves with the source's response once the upstream
+		// body has been read, so body-dependent consumers can await it.
+		let resolvePrimary;
+		let rejectPrimary;
+		const primaryResponse = new Promise((resolve, reject) => {
+			resolvePrimary = resolve;
+			rejectPrimary = reject;
+		});
+		// If no one awaits primaryResponse, suppress the unhandled-rejection that
+		// would otherwise fire when we reject below.
+		primaryResponse.catch(() => {});
+		Promise.resolve()
+			.then(() => hooks.populateRelated(context.requestContext, { cacheKey, primaryResponse }))
+			.catch((err) => {
+				// HttpObjectSource has no scope.logger; console is the fallback.
+				console.warn?.(`rp-cache populateRelated hook failed: ${err?.message ?? err}`);
+			});
 
-		if (!hooks.isCacheableResponse(upstreamRes, context)) {
-			context.noCacheStore = true;
+		try {
+			const [url] = cacheKey.split('|');
+			const conditionals = buildConditionalsFromRecord(context.replacingRecord);
+			const upstreamReqConfig = buildUpstreamRequest(url, context.requestContext, conditionals);
+			const upstreamRes = await requestUpstream(upstreamReqConfig);
+
+			if (!hooks.isCacheableResponse(upstreamRes, context)) {
+				context.noCacheStore = true;
+			}
+
+			applyFreshnessFromResponse(upstreamRes, context);
+			checkVaryCompatibility(upstreamRes, context);
+
+			const freshnessOverride = hooks.freshnessLifetime(upstreamRes, context.requestContext);
+			if (typeof freshnessOverride === 'number' && Number.isFinite(freshnessOverride)) {
+				context.expiresAt = Date.now() + freshnessOverride * 1000;
+			}
+
+			if (upstreamRes.statusCode === 304 && context.replacingRecord) {
+				context.cacheStatus = 'REVALIDATED';
+				resolvePrimary({
+					statusCode: context.replacingRecord.statusCode,
+					headers: ensureJsonHeaders(context.replacingRecord.headers),
+					content: context.replacingRecord.content,
+				});
+				return context.replacingRecord;
+			}
+
+			const now = Date.now();
+			const expiresAt = context.expiresAt ?? null;
+			const swrSec = context.staleWhileRevalidateSeconds;
+			const sieSec = context.staleIfErrorSeconds;
+
+			const tagsFromHook = hooks.tagsForResponse(upstreamRes, context.requestContext);
+			let tags;
+			if (Array.isArray(tagsFromHook)) {
+				tags = tagsFromHook;
+			} else {
+				const tagsHeader = upstreamRes.headers[config.tagHeader.toLowerCase()];
+				tags = tagsHeader ? String(tagsHeader).split(/\s+/).filter(Boolean) : null;
+			}
+
+			const content = await createBlob(upstreamRes.body);
+			resolvePrimary({
+				statusCode: upstreamRes.statusCode,
+				headers: upstreamRes.headers,
+				content,
+			});
+
+			return {
+				cacheKey,
+				statusCode: upstreamRes.statusCode,
+				headers: cleanResponseHeadersAsString(upstreamRes.headers),
+				content,
+				lastCached: now,
+				staleWhileRevalidateUntil: typeof swrSec === 'number' && expiresAt ? new Date(expiresAt + swrSec * 1000) : null,
+				staleIfErrorUntil: typeof sieSec === 'number' && expiresAt ? new Date(expiresAt + sieSec * 1000) : null,
+				tags,
+			};
+		} catch (err) {
+			rejectPrimary(err);
+			throw err;
 		}
-
-		applyFreshnessFromResponse(upstreamRes, context);
-		checkVaryCompatibility(upstreamRes, context);
-
-		const freshnessOverride = hooks.freshnessLifetime(upstreamRes, context.requestContext);
-		if (typeof freshnessOverride === 'number' && Number.isFinite(freshnessOverride)) {
-			context.expiresAt = Date.now() + freshnessOverride * 1000;
-		}
-
-		if (upstreamRes.statusCode === 304 && context.replacingRecord) {
-			context.cacheStatus = 'REVALIDATED';
-			return context.replacingRecord;
-		}
-
-		const now = Date.now();
-		const expiresAt = context.expiresAt ?? null;
-		const swrSec = context.staleWhileRevalidateSeconds;
-		const sieSec = context.staleIfErrorSeconds;
-
-		const tagsFromHook = hooks.tagsForResponse(upstreamRes, context.requestContext);
-		let tags;
-		if (Array.isArray(tagsFromHook)) {
-			tags = tagsFromHook;
-		} else {
-			const tagsHeader = upstreamRes.headers[config.tagHeader.toLowerCase()];
-			tags = tagsHeader ? String(tagsHeader).split(/\s+/).filter(Boolean) : null;
-		}
-
-		return {
-			cacheKey,
-			statusCode: upstreamRes.statusCode,
-			headers: cleanResponseHeadersAsString(upstreamRes.headers),
-			content: await createBlob(upstreamRes.body),
-			lastCached: now,
-			staleWhileRevalidateUntil: typeof swrSec === 'number' && expiresAt ? new Date(expiresAt + swrSec * 1000) : null,
-			staleIfErrorUntil: typeof sieSec === 'number' && expiresAt ? new Date(expiresAt + sieSec * 1000) : null,
-			tags,
-		};
 	}
 }

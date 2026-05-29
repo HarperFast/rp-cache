@@ -146,8 +146,43 @@ export const buildCacheKey = (req) => `${req.headers.get('x-forwarded-host')}${r
 | `freshnessLifetime`        | `() => null`                     | Return seconds; overrides the freshness calc, replacing `max-age`/`s-maxage`/`Expires`/heuristic.  |
 | `tagsForResponse`          | `() => null`                     | Return a `string[]`; replaces the `Surrogate-Key` header–derived tags for this response.           |
 | `transformResponseHeaders` | identity                         | Receive the final response `Headers` (post `X-Cache` / `Via`) and return modified headers.         |
+| `populateRelated`          | `() => null`                     | Fire-and-forget hook called on each miss, in parallel with the upstream fetch. See below.          |
 
 Standard HTTP semantics (`Cache-Control: no-store` / `no-cache`, ETag / `Last-Modified` revalidation) are always honored on top of the hook decisions.
+
+### `populateRelated`
+
+Called once per cache miss, at the start of source resolution and **in parallel** with the primary upstream fetch. Use it to populate related cache entries (e.g. a different format of the same resource) without blocking the primary response. Return value is ignored; thrown errors are caught and logged, never affect the primary.
+
+```js
+populateRelated(request, { cacheKey, primaryResponse });
+```
+
+| Argument                  | Shape                                       | Notes                                                                                                                                                                          |
+| ------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`                 | the original request                        | Same shape as what other hooks receive.                                                                                                                                        |
+| `context.cacheKey`        | `string`                                    | The key the primary upstream fetch is keyed on.                                                                                                                                |
+| `context.primaryResponse` | `Promise<{ statusCode, headers, content }>` | Resolves once the upstream response and body are ready. `headers` is the undici plain object; `content` is the response body as a `Blob`. Rejects if the upstream fetch fails. |
+
+Two usage shapes:
+
+```js
+// Independent parallel work — don't await primaryResponse:
+export const populateRelated = async (req, { cacheKey }) => {
+	const related = relatedKeyFor(req);
+	if (await isCached(related)) return;
+	await fetchAndCache(related);
+};
+
+// Body-dependent work — await primaryResponse, then act on its content:
+export const populateRelated = async (req, { primaryResponse }) => {
+	const { statusCode, content } = await primaryResponse;
+	if (statusCode !== 200) return;
+	await postBodyAndCacheAlternate(req, await content.text());
+};
+```
+
+The hook runs as a detached promise; rp-cache does not wait for it before returning the primary response. Cross-key writes can use `databases.<db>.HttpResourceCache.put(...)`; see the package's `cleanResponseHeadersAsString` for the persisted header format.
 
 ## Response Cache-Control
 
