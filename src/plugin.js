@@ -1,4 +1,5 @@
 import { HttpObjectSource } from './resources/HttpObjectSource.js';
+import { ensureJsonHeaders } from './util/headers.js';
 import { HttpObject } from './resources/HttpObject.js';
 import { hooks, config, HOOK_NAMES } from './hooks.js';
 import { requestUpstream } from './util/upstream.js';
@@ -231,12 +232,8 @@ const proxyForceRevalidate = async (req) => {
 	const existing = await databases.cache.HttpResourceCache.get(cacheKey, { onlyIfCached: true });
 	const conditionals = {};
 	if (existing) {
-		try {
-			const existingHeaders = typeof existing.headers === 'string' ? JSON.parse(existing.headers) : existing.headers;
-			if (existingHeaders?.etag) conditionals.etag = existingHeaders.etag;
-		} catch {
-			// headers stored as line-delimited string; tolerate
-		}
+		const existingHeaders = ensureJsonHeaders(existing.headers);
+		if (existingHeaders.etag) conditionals.etag = existingHeaders.etag;
 		if (existing.lastCached) conditionals.lastModified = new Date(existing.lastCached).toUTCString();
 	}
 	const upstreamReqConfig = buildUpstreamRequest(upstreamUrl, req, conditionals);
