@@ -324,6 +324,7 @@ export const handleApplication = async (scope) => {
 		freshnessLifetime: () => null,
 		tagsForResponse: () => null,
 		transformResponseHeaders: (headers) => headers,
+		onCache: () => null,
 	};
 
 	const applyOverrides = (overrides) => {

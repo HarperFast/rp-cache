@@ -163,11 +163,34 @@ export class HttpObjectSource extends Resource {
 			tags = tagsHeader ? String(tagsHeader).split(/\s+/).filter(Boolean) : null;
 		}
 
+		const content = await createBlob(upstreamRes.body);
+
+		// Fire-and-forget `onCache` hook. Runs only when the response is actually
+		// being persisted (i.e. context.noCacheStore is false); pass-through
+		// (no-store / non-cacheable) responses don't qualify as a "cached" event.
+		// Consumers see the upstream's plain-object headers and the blob that
+		// rp-cache is about to store. Errors caught and logged; never affect the
+		// primary response.
+		if (!context.noCacheStore) {
+			Promise.resolve()
+				.then(() =>
+					hooks.onCache(
+						context.requestContext,
+						{ statusCode: upstreamRes.statusCode, headers: upstreamRes.headers, content },
+						{ cacheKey, tags }
+					)
+				)
+				.catch((err) => {
+					// HttpObjectSource has no scope.logger; console is the fallback.
+					console.warn?.(`rp-cache onCache hook failed: ${err?.message ?? err}`);
+				});
+		}
+
 		return {
 			cacheKey,
 			statusCode: upstreamRes.statusCode,
 			headers: cleanResponseHeadersAsString(upstreamRes.headers),
-			content: await createBlob(upstreamRes.body),
+			content,
 			lastCached: now,
 			staleWhileRevalidateUntil: typeof swrSec === 'number' && expiresAt ? new Date(expiresAt + swrSec * 1000) : null,
 			staleIfErrorUntil: typeof sieSec === 'number' && expiresAt ? new Date(expiresAt + sieSec * 1000) : null,
