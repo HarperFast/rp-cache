@@ -1,5 +1,6 @@
 import { requestUpstream } from '../util/upstream.js';
 import { buildUpstreamRequest, cleanResponseHeadersAsString } from '../util/proxyHeaders.js';
+import { ensureJsonHeaders } from '../util/headers.js';
 import { hooks, config } from '../hooks.js';
 
 const checkVaryCompatibility = (upstreamRes, context) => {
@@ -48,25 +49,6 @@ const parseCacheControl = (value) => {
 			}
 			return parsed;
 		});
-};
-
-const ensureJsonHeaders = (headers) => {
-	if (!headers) {
-		return {};
-	}
-
-	if (typeof headers === 'string') {
-		return JSON.parse(headers);
-	}
-	if (headers instanceof Headers) {
-		const result = {};
-		for (const [key, value] of headers.entries()) {
-			result[key] = value;
-		}
-		return result;
-	}
-
-	return headers;
 };
 
 const buildConditionalsFromRecord = (replacingRecord) => {

@@ -23,7 +23,8 @@
 	"scripts": {
 		"lint": "eslint .",
 		"format:check": "prettier --check .",
-		"format:write": "prettier --write ."
+		"format:write": "prettier --write .",
+		"test": "node --test"
 	},
 	"devDependencies": {
 		"@harperdb/code-guidelines": "^0.0.5",
