@@ -1,6 +1,6 @@
 {
 	"name": "@harperfast/rp-cache",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"private": true,
 	"type": "module",
 	"description": "A Harper plugin that provides a reverse-proxy HTTP object cache.",
