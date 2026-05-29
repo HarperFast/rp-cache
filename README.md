@@ -146,8 +146,37 @@ export const buildCacheKey = (req) => `${req.headers.get('x-forwarded-host')}${r
 | `freshnessLifetime`        | `() => null`                     | Return seconds; overrides the freshness calc, replacing `max-age`/`s-maxage`/`Expires`/heuristic.  |
 | `tagsForResponse`          | `() => null`                     | Return a `string[]`; replaces the `Surrogate-Key` header–derived tags for this response.           |
 | `transformResponseHeaders` | identity                         | Receive the final response `Headers` (post `X-Cache` / `Via`) and return modified headers.         |
+| `onCache`                  | `() => null`                     | Fire-and-forget hook called once per cache write. See below.                                       |
 
 Standard HTTP semantics (`Cache-Control: no-store` / `no-cache`, ETag / `Last-Modified` revalidation) are always honored on top of the hook decisions.
+
+### `onCache`
+
+Called once per cache write — i.e. when an upstream miss has produced a response that's actually about to be persisted in the cache table. It does **not** fire when the response is determined to be non-cacheable (`Cache-Control: no-store`, `isCacheableResponse` returning falsy, etc.), nor on cached `HIT` or `REVALIDATED` paths. Return value is ignored; thrown errors are caught and logged, never affect the primary response.
+
+```js
+onCache(request, response, { cacheKey, tags });
+```
+
+| Argument           | Shape                              | Notes                                                                                                                                |
+| ------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`          | the original request               | Same shape as what other hooks receive.                                                                                              |
+| `response`         | `{ statusCode, headers, content }` | The exact data being persisted. `headers` is the undici plain object (lower-cased keys). `content` is the response body as a `Blob`. |
+| `context.cacheKey` | `string`                           | The key the entry will be stored under.                                                                                              |
+| `context.tags`     | `string[] \| null`                 | Tags computed for the entry (`tagsForResponse` result, or `Surrogate-Key` header–derived default).                                   |
+
+Use it for body-dependent side effects after a cache write — e.g. populating a related cache entry, recording per-miss metrics, POSTing the body to another service:
+
+```js
+export const onCache = async (req, response, { cacheKey, tags }) => {
+	if (response.statusCode !== 200) return;
+	const related = relatedKeyFor(req);
+	if (await isCached(related)) return; // skip if already warmed
+	await convertAndCache(related, await response.content.text(), tags);
+};
+```
+
+The hook runs as a detached promise; rp-cache does not wait for it before returning the primary response. Cross-key writes can use `databases.<db>.HttpResourceCache.put(...)`; see the package's `cleanResponseHeadersAsString` for the persisted header format.
 
 ## Response Cache-Control
 
