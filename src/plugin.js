@@ -226,10 +226,24 @@ const proxyBypass = async (req) => {
 	return formatProxyResponse(upstreamRes, 'BYPASS');
 };
 
+// Harper's Table.get(..., { onlyIfCached: true }) throws
+// ServerError('Entry is not cached', 504) for a cold-cache key rather than
+// returning undefined. For a `Cache-Control: no-cache` revalidation that just
+// means "no existing entry, no conditionals to build — fetch fresh from the
+// upstream as a normal MISS". Anything else we let propagate.
+const getCachedEntryOrUndefined = async (cacheKey) => {
+	try {
+		return await databases.cache.HttpResourceCache.get(cacheKey, { onlyIfCached: true });
+	} catch (err) {
+		if (err?.message === 'Entry is not cached') return undefined;
+		throw err;
+	}
+};
+
 const proxyForceRevalidate = async (req) => {
 	const cacheKey = hooks.buildCacheKey(req);
 	const upstreamUrl = resolveUpstreamUrl(req);
-	const existing = await databases.cache.HttpResourceCache.get(cacheKey, { onlyIfCached: true });
+	const existing = await getCachedEntryOrUndefined(cacheKey);
 	const conditionals = {};
 	if (existing) {
 		const existingHeaders = ensureJsonHeaders(existing.headers);
@@ -371,7 +385,7 @@ export const handleApplication = async (scope) => {
 
 			if (directives.onlyIfCached) {
 				const cacheKey = hooks.buildCacheKey(req);
-				const existing = await databases.cache.HttpResourceCache.get(cacheKey, { onlyIfCached: true });
+				const existing = await getCachedEntryOrUndefined(cacheKey);
 				if (!existing) {
 					const error = new Error('Gateway Timeout');
 					error.statusCode = 504;
